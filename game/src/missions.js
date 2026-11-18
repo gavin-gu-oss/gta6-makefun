@@ -1,133 +1,87 @@
-'use strict';
+import { JOB, SAVE_KEY } from './config.js';
+import { clamp, distance } from './random.js';
 
-const missionStop = (x,z,task,y=0) => ({x,z,task,y});
-const CHECKPOINTS = [
-  missionStop(44,140,'Reach the first checkpoint to start the clock.'),
-  missionStop(44,83,'Follow the checkpoint route.'),
-  missionStop(40,44,'Follow the checkpoint route.'),
-  missionStop(-31,44,'Follow the checkpoint route.'),
-  missionStop(-44,1,'Reach the final checkpoint.'),
+export const MISSIONS=[
+  {name:'First Pickup',reward:750,lines:['Mara Quinn: Welcome to Port Solano, Rae. That Falcon is yours for the evening.','Collect my parcel at Mariner Market. Sunset Pier is waiting.']},
+  {name:'Checkpoint Run',reward:900,lines:['Mara Quinn: Let us see how well you know these streets.','Five checkpoints. Ninety seconds. Keep your wheels on the road.']},
+  {name:'Repo Job',reward:1100,lines:['Mara Quinn: A gold Falcon GT is parked by the marina. The owner missed a payment.','Bring that specific car to the chop shop. Keep its condition above 40%.']},
+  {name:'Rooftop Drop',reward:1250,lines:['Mara Quinn: Someone has tipped off the precinct. They know your face.','Leave the car. Use the exterior stairs on the east side of the teal-roof building. Take the roof parcel.']},
+  {name:'The Big Score',reward:2500,lines:['Mara Quinn: Last job, Rae. Dante has the vault codes.','Collect him at the diner, reach the bank, hold twenty seconds, then get to our safe house.']},
 ];
-const ROOFTOP = {x:-66,z:66,w:8,d:8,h:4};
-const RAMP = {x:-66,foot:57,top:62};
-const STORY = [
-  {
-    name:'First Pickup',reward:750,
-    lines:['Rae, it’s Mara Quinn. I left a package on Anchor Avenue.','Take a car, pick it up and deliver it to the waterfront.'],
-    stops:[missionStop(0,48,'Drive to the pickup and collect Mara’s package.'),
-      missionStop(44,178,'Deliver the package to the waterfront.')],
-  },
-  {
-    name:'Checkpoint Run',reward:900,
-    lines:['Let’s see how well you know these streets.','Hit five checkpoints. The first one starts your 90 seconds.'],
-    stops:CHECKPOINTS,
-  },
-  {
-    name:'Repo Job',reward:1200,
-    lines:['A gold Falcon GT is parked by the marina.','Bring it to the chop shop. I need it in one piece.'],
-    stops:[missionStop(68,195,'Take the gold Falcon GT at the marina.'),
-      missionStop(88,66,'Deliver the gold Falcon GT to the chop shop.')],
-  },
-  {
-    name:'Rooftop Drop',reward:1500,
-    lines:['Police are already looking for you. Go on foot.','Take the north ramp up to the rooftop drop on Lantern Square.'],
-    stops:[missionStop(ROOFTOP.x,ROOFTOP.z,'Reach the rooftop on foot. Ramp on the north side.',ROOFTOP.h)],
-  },
-  {
-    name:'The Big Score',reward:2500,
-    lines:['Pick up Dante at the diner and drive him to the bank.','Give him twenty seconds inside, then get to the safe house.'],
-    stops:[missionStop(44,-19,'Drive to the diner to pick up Dante.'),
-      missionStop(0,-66,'Drive Dante to the bank and stop.'),
-      missionStop(0,-66,'Stay near the bank while Dante opens the vault.'),
-      missionStop(-88,-113,'Get Dante and the score to the safe house.')],
-  },
-];
-
-function roofHeight(x,z) {
-  if (Math.abs(x-ROOFTOP.x)>ROOFTOP.w/2) return 0;
-  if (z>=ROOFTOP.z-ROOFTOP.d/2 && z<=ROOFTOP.z+ROOFTOP.d/2) return ROOFTOP.h;
-  if (Math.abs(x-RAMP.x)<1.5 && z>=RAMP.foot && z<RAMP.top) {
-    return ROOFTOP.h*(z-RAMP.foot)/(RAMP.top-RAMP.foot);
-  }
-  return 0;
+export const CHECKPOINTS=[{x:126,z:42,name:'Coast gate'},{x:126,z:-84,name:'Market turn'},{x:0,z:-84,name:'Old town sprint'},{x:0,z:42,name:'Civic straight'},{x:84,z:42,name:'Finish line'}];
+const CHOP={x:-126,z:42,name:'Quinn Salvage'},DINER={x:42,z:0,name:'Nightjar Diner · Dante'},BANK={x:-84,z:-84,name:'Tide Union Bank'},SAFE={x:84,z:126,name:'Quinn Safe House'};
+export function missionIndex(state){return state.mission<2?0:Math.min(4,state.mission-1);}
+export function hasDante(state,car){return state.mission===5&&state.stage>0&&!!car&&state.car===car;}
+export function introduce(state) {
+  if(state.mission>=6)return;
+  state.dialogue=MISSIONS[missionIndex(state)].lines;state.dialogueTime=11;
 }
-
-function currentStop() {
-  return STORY[game.chapter]?.stops[game.stage];
+export function marker(state) {
+  if(state.mission===0)return JOB.pickup;
+  if(state.mission===1)return JOB.delivery;
+  if(state.mission===2)return CHECKPOINTS[state.stage||0];
+  if(state.mission===3)return state.stage?CHOP:{x:164,z:58,name:'Gold Falcon · marina'};
+  if(state.mission===4){const r=state.world.rooftop;return r?{x:r.x,z:r.z,y:r.y,name:'Rooftop parcel · east stairs'}:null;}
+  if(state.mission===5)return state.stage===0?DINER:state.stage<3?BANK:SAFE;
+  return null;
 }
-
-function danteRidesIn(car) {
-  return game.chapter===4 && (game.stage===1 || game.stage===3) && game.vehicle===car;
+export function objective(state) {
+  if(state.retryDelay>0)return 'Catch your breath. Mara will call again in '+Math.ceil(state.retryDelay)+' s.';
+  if(state.mission<2)return !state.car?(state.mission===0?'Find a ride. Press E beside a car.':'Return to a car and deliver the package.'):(state.mission===0?'FIRST PICKUP / Collect the package at Mariner Market.':'PACKAGE ON BOARD / Deliver to Sunset Pier.');
+  if(state.mission===2)return 'CHECKPOINT RUN / '+(state.stage+1)+'/5 · '+Math.ceil(state.timer)+' s · Drive through the gold gates.';
+  if(state.mission===3)return state.stage?'REPO JOB / Deliver the gold Falcon to Quinn Salvage · '+Math.max(0,Math.round(100-(state.world.cars.find(c=>c.id==='repo')?.damage||0)))+'% condition.':'REPO JOB / Steal the specific gold Falcon parked at the marina.';
+  if(state.mission===4)return 'ROOFTOP DROP / On foot, climb the marked east stairs. Two stars. Stay out of custody.';
+  if(state.mission===5)return ['THE BIG SCORE / Pick up Dante at Nightjar Diner in a car.','THE BIG SCORE / Drive Dante to Tide Union Bank.','HOLD THE BANK / Stay within 18 m · Vault opens in '+Math.ceil(Math.max(0,20-state.vaultTime))+' s.','THE BIG SCORE / Escape to the safe house with a car.'][state.stage];
+  return 'STORY COMPLETE / Free roam. Port Solano is yours to explore.';
 }
-
-function message(title, detail, seconds=5) {
-  game.notice = {title,detail};
-  game.banner = game.time+seconds;
+function finish(state,index) {
+  const job=MISSIONS[index];state.cash+=job.reward;state.earnings+=job.reward;state.lastReward=job.reward;state.lastMission=job.name;state.banner=7;state.ammo=24;
+  state.events.push('complete');state.mission++;state.stage=0;state.timer=90;state.vaultTime=0;state.pickupTime=0;state.missionRevision++;
+  if(state.mission>=6){state.storyComplete=true;state.storyScreen=true;}
+  else introduce(state);
+  return job.name.toUpperCase()+' COMPLETE · +$'+job.reward.toLocaleString('en-US');
 }
-
-function introduceMission() {
-  game.dialogueUntil = game.time+9;
+export function advanceMission(state,dt) {
+  if(state.retryDelay>0)return null;
+  const car=state.car;
+  if(state.mission===2) {
+    state.timer-=dt;
+    if(state.timer<=0){state.stage=0;state.timer=90;state.missionRevision++;return 'Checkpoint clock expired. Route reset — try again.';}
+    if(car&&distance(car,marker(state))<7){state.stage++;state.events.push('pickup');state.missionRevision++;if(state.stage===5)return finish(state,1);}
+    return null;
+  }
+  if(state.mission===3) {
+    const repo=state.world.cars.find(c=>c.id==='repo');
+    if(repo?.damage>=60){if(car===repo)state.car=null;Object.assign(repo,{x:164,z:58,yaw:Math.PI,speed:0,damage:0});state.stage=0;state.missionRevision++;return 'The Falcon took heavy damage. Mara arranged a replacement at the marina.';}
+    if(!state.stage){if(car===repo){state.stage=1;state.missionRevision++;state.events.push('pickup');return 'Gold Falcon secured. Deliver it gently to Quinn Salvage.';}return null;}
+    if(car!==repo){state.pickupTime=0;return null;}
+  }
+  if(state.mission===4)state.wanted=Math.max(2,state.wanted);
+  if(state.mission===5&&state.stage===2) {
+    state.wanted=Math.max(3,state.wanted);
+    if(distance(car||state.player,BANK)<18){state.vaultTime+=dt;if(state.vaultTime>=20){state.stage=3;state.missionRevision++;state.events.push('pickup');return 'Dante: Vault is open. We have it. Get to the safe house!';}}
+    return null;
+  }
+  const m=marker(state),actor=car||state.player;
+  const valid=state.mission===4?!car&&Math.abs(state.player.y-m.y)<1.2:!!car&&Math.abs(car.speed)<3;
+  if(!m||!valid||distance(actor,m)>6){state.pickupTime=0;return null;}
+  state.pickupTime+=dt;if(state.pickupTime<1.1)return null;state.pickupTime=0;state.events.push('pickup');state.missionRevision++;
+  if(state.mission===0){state.mission=1;return 'Package secured. Mara says: “Bring it to Sunset Pier. Keep it clean.”';}
+  if(state.mission===1)return finish(state,0);
+  if(state.mission===3)return finish(state,2);
+  if(state.mission===4)return finish(state,3);
+  if(state.mission===5){if(state.stage===0){state.stage=1;return 'Dante: Good to meet you, Rae. Tide Union Bank. Let us move.';}if(state.stage===1){state.stage=2;state.vaultTime=0;state.wanted=Math.max(3,state.wanted);return 'Dante: Twenty seconds. Keep the engine warm and stay close.';}if(state.stage===3)return finish(state,4);}
+  return null;
 }
-
-function restartMission() {
-  game.stage = 0;
-  game.deadline = 0;
-  if (game.chapter===2) {
-    if (game.vehicle===game.city.repo) game.vehicle = null;
-    Object.assign(game.city.repo,{x:68,z:195,yaw:Math.PI/2,speed:0,damage:0,stolen:false});
-  }
+export function loadSave(storage) {
+  try {
+    const s=JSON.parse(storage.getItem(SAVE_KEY));
+    if(!s||s.version!==1||![s.x,s.z,s.cash,s.mission,s.wanted].every(Number.isFinite))return null;
+    const num=(n,f,min,max)=>clamp(Number.isFinite(s[n])?s[n]:f,min,max),mission=Math.floor(num('mission',0,0,6));
+    const stage=Math.floor(num('stage',0,0,mission===2?4:mission===3?1:mission===5?3:0));
+    return {x:num('x',0,-174,190),z:num('z',17,-174,174),y:num('y',0,0,60),yaw:num('yaw',Math.PI,-10000,10000),cash:Math.floor(num('cash',120,0,9999999)),mission,stage,timer:num('timer',90,.1,90),vaultTime:num('vaultTime',0,0,20),wanted:Math.floor(num('wanted',0,0,5)),health:num('health',100,1,100),ammo:Math.floor(num('ammo',24,0,24)),earnings:Math.floor(num('earnings',mission>=2?750:0,0,9999999)),repoDamage:num('repoDamage',0,0,59),storyComplete:mission===6};
+  } catch {return null;}
 }
-
-function updateMission() {
-  const mission = STORY[game.chapter], stop = currentStop();
-  if (!stop) return;
-  const {player,vehicle,chapter,stage,time} = game;
-  const radius = chapter===4 && stage===2 ? 23 : 6.5;
-  const atStop = Math.hypot(player.x-stop.x,player.z-stop.z)<radius;
-  if (chapter===1 && game.deadline && time>=game.deadline) {
-    restartMission();
-    message('TIME EXPIRED','Return to the first checkpoint.');
-    saveGame();
-    return;
-  }
-  if (chapter===2 && game.city.repo.damage>=45) {
-    restartMission();
-    message('REPO FAILED','A replacement Falcon GT is at the marina.');
-    saveGame();
-    return;
-  }
-  if (chapter===3 && time>=game.wantedGrace && game.wanted!==2) setWanted(2);
-  if (chapter===4 && stage===2) {
-    if (game.wanted<3) setWanted(3);
-    if (!game.deadline) game.deadline = time+20;
-    if (!atStop) {
-      game.deadline = time+20;
-      return;
-    }
-    if (time<game.deadline) return;
-  } else if (!atStop && !(chapter===2 && stage===0 && vehicle===game.city.repo)) return;
-
-  if (chapter===3 ? vehicle || player.y<ROOFTOP.h-.2 : !vehicle && !(chapter===4 && stage===2)) return;
-  if (chapter===2 && vehicle!==game.city.repo) return;
-  if (chapter===4 && stage===1 && Math.abs(vehicle.speed)>2) return;
-  if (chapter===1 && stage===0) game.deadline = time+90;
-  if (chapter===4 && stage===1) {
-    game.deadline = time+20;
-    setWanted(Math.max(3,game.wanted));
-  }
-  game.stage++;
-  playSound('pickup');
-  if (game.stage===mission.stops.length) {
-    game.cash += mission.reward;
-    game.earnings += mission.reward;
-    game.ammo = 24;
-    game.chapter++;
-    game.stage = 0;
-    game.deadline = 0;
-    message('MISSION COMPLETE',mission.name+' · +$'+mission.reward.toLocaleString('en-US'));
-    playSound('complete');
-    introduceMission();
-    if (game.chapter===STORY.length) game.storyAt = time+4;
-  }
-  saveGame();
+export function saveGame(state,storage) {
+  try {const p=state.car||state.player;storage.setItem(SAVE_KEY,JSON.stringify({version:1,x:p.x,z:p.z,y:state.car?0:p.y,yaw:p.yaw,cash:state.cash,mission:state.mission,stage:state.stage,timer:state.timer,vaultTime:state.vaultTime,wanted:state.wanted,health:state.health,ammo:state.ammo,earnings:state.earnings,repoDamage:state.world.cars.find(c=>c.id==='repo')?.damage||0}));return true;}catch{return false;}
 }

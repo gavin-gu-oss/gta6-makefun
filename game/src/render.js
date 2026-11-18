@@ -1,223 +1,140 @@
-'use strict';
+import { mix } from './random.js';
 
-const TAU = Math.PI * 2;
-const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
-const rightOf = yaw => [Math.cos(yaw), -Math.sin(yaw)];
-const forwardOf = yaw => [Math.sin(yaw), Math.cos(yaw)];
-const tint = (hex) => [16, 8, 0].map(shift => ((hex >> shift) & 255) / 255);
-const dot = (a, b) => a.reduce((sum, value, index) => sum + value * b[index], 0);
-const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
-const unit = v => v.map(value => value / Math.hypot(...v));
-
-class Mesh {
-  constructor() {
-    this.data = [];
+export class Geometry {
+  constructor() { this.data = []; }
+  vertex(p, n, uv, c, tex = 0) { this.data.push(...p, ...n, ...uv, ...c, tex); }
+  quad(a, b, c, d, normal, color, tex = 0, u = 1, v = 1) {
+    const points = [a, b, c, a, c, d], uv = [[0, 0], [u, 0], [u, v], [0, 0], [u, v], [0, v]];
+    points.forEach((p, i) => this.vertex(p, normal, uv[i], color, tex));
   }
-
-  quad(a, b, c, d, rgb, shade, uv = [[-1,-1],[-1,-1],[-1,-1],[-1,-1]]) {
-    const points = [a,b,c,d];
-    for (const index of [0,1,2,0,2,3]) {
-      this.vertex(points[index], rgb, shade, uv[index]);
+  box(x, y, z, w, h, l, color, yaw = 0, tex = 0) {
+    const s = Math.sin(yaw), c = Math.cos(yaw);
+    const p = (a, b, d) => [x + a*c + d*s, y+b, z-a*s+d*c];
+    const n = (a, b, d) => [a*c+d*s, b, -a*s+d*c];
+    const a = -w/2, b = w/2, f = -l/2, r = l/2, t = h/2, q = -h/2;
+    this.quad(p(a,q,r),p(b,q,r),p(b,t,r),p(a,t,r),n(0,0,1),color,tex,w/4,h/4);
+    this.quad(p(b,q,f),p(a,q,f),p(a,t,f),p(b,t,f),n(0,0,-1),color,tex,w/4,h/4);
+    this.quad(p(b,q,r),p(b,q,f),p(b,t,f),p(b,t,r),n(1,0,0),color,tex,l/4,h/4);
+    this.quad(p(a,q,f),p(a,q,r),p(a,t,r),p(a,t,f),n(-1,0,0),color,tex,l/4,h/4);
+    this.quad(p(a,t,r),p(b,t,r),p(b,t,f),p(a,t,f),[0,1,0],color);
+    this.quad(p(a,q,f),p(b,q,f),p(b,q,r),p(a,q,r),[0,-1,0],color);
+  }
+  cylinder(x,y,z,r,h,color,segments=8) {
+    for(let i=0;i<segments;i++) {
+      const a=i/segments*Math.PI*2,b=(i+1)/segments*Math.PI*2;
+      const p=[x+Math.sin(a)*r,y-h/2,z+Math.cos(a)*r],q=[x+Math.sin(b)*r,y-h/2,z+Math.cos(b)*r];
+      this.quad(p,q,[q[0],y+h/2,q[2]],[p[0],y+h/2,p[2]],[Math.sin((a+b)/2),0,Math.cos((a+b)/2)],color);
+      this.vertex([x,y+h/2,z],[0,1,0],[0,0],color);
+      this.vertex([p[0],y+h/2,p[2]],[0,1,0],[0,0],color);
+      this.vertex([q[0],y+h/2,q[2]],[0,1,0],[0,0],color);
     }
   }
-
-  vertex(position, rgb, shade, uv = [-1,-1]) {
-    this.data.push(...position, ...rgb.map(value => value * shade), ...uv);
+  disc(x,y,z,rx,rz,color,segments=14) {
+    for(let i=0;i<segments;i++) {
+      const a=i/segments*Math.PI*2,b=(i+1)/segments*Math.PI*2;
+      this.vertex([x,y,z],[0,1,0],[0,0],color);
+      this.vertex([x+Math.cos(a)*rx,y,z+Math.sin(a)*rz],[0,1,0],[0,0],color);
+      this.vertex([x+Math.cos(b)*rx,y,z+Math.sin(b)*rz],[0,1,0],[0,0],color);
+    }
   }
-
-  box(x, y, z, w, h, d, hex, yaw = 0, windows = false) {
-    const [rx, rz] = rightOf(yaw);
-    const [fx, fz] = forwardOf(yaw);
-    const point = (u, v, t) => [x + rx*u + fx*t, y+v, z+rz*u+fz*t];
-    const a = point(-w/2,0,-d/2), b = point(w/2,0,-d/2);
-    const c = point(w/2,0,d/2), e = point(-w/2,0,d/2);
-    const top = p => [p[0],p[1]+h,p[2]];
-    const rgb = tint(hex);
-    const uv = width => windows ? [[0,0],[width/6,0],[width/6,h/6],[0,h/6]] : undefined;
-    this.quad(a,b,top(b),top(a),rgb,.82,uv(w));
-    this.quad(b,c,top(c),top(b),rgb,.69,uv(d));
-    this.quad(c,e,top(e),top(c),rgb,.91,uv(w));
-    this.quad(e,a,top(a),top(e),rgb,.98,uv(d));
-    this.quad(top(a),top(b),top(c),top(e),rgb,1);
-    this.quad(e,c,b,a,rgb,.55);
-  }
-
-  oval(x, y, z, rx, ry, rz, hex) {
-    const rgb = tint(hex);
-    const ring = (latitude, angle) => {
-      const phi = latitude * Math.PI/6;
-      return [x+rx*Math.sin(phi)*Math.cos(angle), y+ry*Math.cos(phi), z+rz*Math.sin(phi)*Math.sin(angle)];
-    };
-    for (let lat=0; lat<6; lat++) {
-      for (let slice=0; slice<8; slice++) {
-        const angle = slice*TAU/8;
-        const next = angle+TAU/8;
-        this.quad(ring(lat,angle),ring(lat,next),ring(lat+1,next),ring(lat+1,angle),
-          rgb,.73+.22*Math.cos(angle-2)+.09*Math.cos(lat*Math.PI/6));
-      }
+  capsule(x,y,z,r,h,color) {
+    const rings=[],straight=Math.max(0,h/2-r);
+    for(let half=0;half<2;half++)for(let j=0;j<=3;j++) {
+      const a=(half*3+j)*Math.PI/6;
+      rings.push({r:Math.sin(a)*r,y:(half?-straight:straight)+Math.cos(a)*r,ny:Math.cos(a)});
+    }
+    for(let j=0;j<rings.length-1;j++)for(let i=0;i<8;i++) {
+      const a=i*Math.PI/4,b=(i+1)*Math.PI/4,p=rings[j],q=rings[j+1];
+      const point=(ring,angle)=>[x+Math.sin(angle)*ring.r,y+ring.y,z+Math.cos(angle)*ring.r];
+      this.quad(point(p,a),point(p,b),point(q,b),point(q,a),[Math.sin((a+b)/2), (p.ny+q.ny)/2, Math.cos((a+b)/2)],color);
     }
   }
 }
-
-function viewProjection(eye, target, aspect) {
-  const back = unit(eye.map((value,index) => value-target[index]));
-  const right = unit(cross([0,1,0],back));
-  const up = cross(back,right);
-  const focal = 1 / Math.tan(Math.PI / 6);
-  const near = .3, far = 950;
-  const a = -(far+near)/(far-near), b = -2*far*near/(far-near);
-  const rows = [
-    [...right.map(value => value*focal/aspect), -dot(right,eye)*focal/aspect],
-    [...up.map(value => value*focal), -dot(up,eye)*focal],
-    [...back.map(value => value*a), -dot(back,eye)*a+b],
-    [...back.map(value => -value), dot(back,eye)],
-  ];
-  return new Float32Array(rows.flatMap((_,column) => rows.map(row => row[column])));
+export function perspective(fov, aspect, near, far) {
+  const f=1/Math.tan(fov/2),nf=1/(near-far);
+  return new Float32Array([f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
 }
-
-class Renderer {
-  constructor(canvas, city) {
-    this.canvas = canvas;
-    const gl = this.gl = canvas.getContext('webgl', { alpha: false, antialias: true });
-    if (!gl) throw new Error('WebGL is required to play Solano Streets.');
-    this.scene = this.program(
-      `attribute vec3 p,c;
-      attribute vec2 uv;
-      uniform mat4 vp;
-      uniform vec3 eye;
-      varying vec3 color;
-      varying vec2 tile;
-      varying float distanceToEye;
-      void main(){color=c;tile=uv;distanceToEye=length(p-eye);gl_Position=vp*vec4(p,1.);}`,
-      `precision mediump float;
-      varying vec3 color;
-      varying vec2 tile;
-      varying float distanceToEye;
-      uniform sampler2D windows;
-      uniform vec3 fog, light;
-      void main(){
-        vec3 surface=color;
-        if(tile.x>=0.)surface*=texture2D(windows,tile).rgb;
-        gl_FragColor=vec4(mix(surface*light,fog,smoothstep(68.,465.,distanceToEye)),1.);
-      }`,
-      ['p','c','uv'], ['vp','eye','fog','light']);
-    this.sky = this.program(
-      `attribute vec2 p; varying vec2 xy; void main(){xy=p;gl_Position=vec4(p,0.,1.);}`,
-      `precision mediump float;
-      varying vec2 xy;
-      uniform vec3 fog, zenith, sun;
-      uniform float horizon, aspect;
-      void main(){
-        vec3 sky=mix(fog,zenith,smoothstep(-.12,1.15,xy.y-horizon));
-        float d=length(vec2((xy.x-sun.x)*aspect,xy.y-sun.y));
-        sky+=vec3(1.,.52,.19)*.27*exp(-6.*d);
-        sky=mix(sky,vec3(1.,.91,.64),1.-smoothstep(sun.z,sun.z+.007,d));
-        gl_FragColor=vec4(sky,1.);
-      }`, ['p'], ['fog','zenith','sun','horizon','aspect']);
-    this.skyBuffer = this.buffer([-1,-1,3,-1,-1,3], gl.STATIC_DRAW);
-    this.cityBuffer = this.buffer(city.data, gl.STATIC_DRAW);
-    this.cityCount = city.data.length/8;
-    this.liveBuffer = gl.createBuffer();
-
-    const tile = document.createElement('canvas');
-    tile.width = tile.height = 64;
-    const ctx = tile.getContext('2d');
-    ctx.fillStyle = '#f5f2eb';
-    ctx.fillRect(0,0,64,64);
-    for (const x of [7,36]) for (const y of [8,38]) {
-      ctx.fillStyle = '#a5a8a4';
-      ctx.fillRect(x-2,y-2,23,19);
-      const glass = ctx.createLinearGradient(x,y,x+18,y+14);
-      glass.addColorStop(0,'#496175');
-      glass.addColorStop(.6,'#819da9');
-      glass.addColorStop(1,'#394956');
-      ctx.fillStyle = glass;
-      ctx.fillRect(x,y,19,15);
-      ctx.fillStyle = '#c6c6b8';
-      ctx.fillRect(x+9,y,1,15);
-    }
-    gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
-    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,tile);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+const normalize = v => {const l=Math.hypot(...v)||1;return v.map(x=>x/l);};
+const cross = (a,b) => [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+export function lookAt(eye, target) {
+  const z=normalize(eye.map((v,i)=>v-target[i])),x=normalize(cross([0,1,0],z)),y=cross(z,x);
+  const dot=a=>-(a[0]*eye[0]+a[1]*eye[1]+a[2]*eye[2]);
+  return new Float32Array([x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,dot(x),dot(y),dot(z),1]);
+}
+export function multiply(a,b) {
+  const o=new Float32Array(16);
+  for(let c=0;c<4;c++)for(let r=0;r<4;r++)o[c*4+r]=a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3];
+  return o;
+}
+function program(gl, vs, fs) {
+  const compile=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;};
+  const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_SHADER,vs));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,fs));gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));return p;
+}
+const vertex = `
+attribute vec3 aPos; attribute vec3 aNormal; attribute vec2 aUV; attribute vec3 aColor; attribute float aTex;
+uniform mat4 uVP; varying vec3 vPos; varying vec3 vNormal; varying vec2 vUV; varying vec3 vColor; varying float vTex;
+void main(){vPos=aPos;vNormal=aNormal;vUV=aUV;vColor=aColor;vTex=aTex;gl_Position=uVP*vec4(aPos,1.0);}`;
+const fragment = `precision mediump float;
+varying vec3 vPos; varying vec3 vNormal; varying vec2 vUV; varying vec3 vColor; varying float vTex;
+uniform sampler2D uWindows; uniform sampler2D uSigns; uniform vec3 uEye; uniform vec3 uFog; uniform float uDusk;
+void main(){
+ vec3 light=normalize(vec3(-0.6,0.9,-0.35)); float diffuse=max(dot(normalize(vNormal),light),0.0);
+ vec3 albedo=vColor;
+ if(vTex>1.5){albedo*=texture2D(uSigns,vUV).rgb;}
+ else if(vTex>0.5){vec3 w=texture2D(uWindows,vUV).rgb;albedo*=w;
+   float pane=step(0.16,fract(vUV.x))*step(fract(vUV.x),0.80)*step(0.18,fract(vUV.y))*step(fract(vUV.y),0.78);
+   float selected=step(0.55,fract(sin(dot(floor(vUV),vec2(12.9898,78.233)))*437.1));
+   albedo=mix(albedo,vec3(1.0,0.76,0.35),pane*selected*uDusk*0.8);}
+ vec3 lit=albedo*(vec3(0.48,0.53,0.57)+diffuse*vec3(0.62,0.49,0.32));
+ lit=mix(lit,lit*vec3(0.76,0.72,0.96),uDusk*0.38);
+ float fog=1.0-exp(-pow(distance(vPos,uEye)*0.0035,1.5));
+ gl_FragColor=vec4(mix(lit,uFog,clamp(fog,0.0,0.93)),1.0);
+}`;
+const skyVertex=`attribute vec2 aPoint; varying vec2 vUV;void main(){vUV=aPoint*0.5+0.5;gl_Position=vec4(aPoint,0.9999,1.0);}`;
+const skyFragment=`precision mediump float;varying vec2 vUV;uniform float uDusk;uniform float uAspect;
+void main(){vec3 low=mix(vec3(0.97,0.79,0.55),vec3(0.88,0.45,0.36),uDusk);
+vec3 high=mix(vec3(0.24,0.59,0.69),vec3(0.16,0.24,0.40),uDusk);vec3 col=mix(low,high,pow(vUV.y,0.68));
+vec2 p=(vUV-vec2(0.72,0.68))*vec2(uAspect,1.0);float d=length(p);
+col+=vec3(0.20,0.11,0.03)*exp(-d*9.0);col=mix(col,vec3(1.0,0.91,0.64),1.0-smoothstep(0.030,0.033,d));
+gl_FragColor=vec4(col,1.0);}`;
+export class Renderer {
+  constructor(canvas, staticGeometry) {
+    this.canvas=canvas;const gl=this.gl=canvas.getContext('webgl',{antialias:true,alpha:false,preserveDrawingBuffer:true});
+    if(!gl)throw Error('WebGL is unavailable. Enable hardware acceleration and reload.');
+    this.p=program(gl,vertex,fragment);this.sky=program(gl,skyVertex,skyFragment);
+    this.locations={};for(const n of ['uVP','uEye','uFog','uDusk','uWindows','uSigns'])this.locations[n]=gl.getUniformLocation(this.p,n);
+    this.attributes=[['aPos',3,0],['aNormal',3,12],['aUV',2,24],['aColor',3,32],['aTex',1,44]].map(([name,size,offset])=>({loc:gl.getAttribLocation(this.p,name),size,offset}));
+    this.static=this.upload(staticGeometry);this.dynamic={buffer:gl.createBuffer(),count:0};
+    this.skyBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.skyBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+    const c=document.createElement('canvas');c.width=c.height=128;const ctx=c.getContext('2d');ctx.fillStyle='#d3d2bd';ctx.fillRect(0,0,128,128);
+    ctx.fillStyle='#405d65';ctx.fillRect(21,13,84,93);ctx.fillStyle='#73969a';ctx.fillRect(24,16,78,6);
+    ctx.fillStyle='#bed5cc';ctx.fillRect(28,25,7,64);ctx.fillStyle='#234752';ctx.fillRect(63,16,4,88);ctx.fillRect(23,55,80,4);
+    ctx.fillStyle='#ebe2be';ctx.fillRect(15,107,98,8);
+    const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.generateMipmap(gl.TEXTURE_2D);
+    const sign=document.createElement('canvas');sign.width=512;sign.height=128;const sc=sign.getContext('2d');
+    sc.fillStyle='#173f44';sc.fillRect(0,0,512,128);sc.fillStyle='#ffbd6b';sc.fillRect(12,12,488,4);sc.textAlign='center';sc.fillStyle='#fff0cf';sc.font='bold 38px Arial';sc.fillText('VISIT PORT SOLANO',256,65);sc.font='18px Arial';sc.fillStyle='#86d7c2';sc.fillText('YOUR NEXT CHAPTER STARTS HERE',256,100);
+    gl.activeTexture(gl.TEXTURE1);const signTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,signTexture);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,sign);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.activeTexture(gl.TEXTURE0);
+    gl.enable(gl.DEPTH_TEST);this.vp=null;
   }
-
-  program(vertex, fragment, attributes, uniforms) {
-    const gl = this.gl;
-    const program = gl.createProgram();
-    for (const [kind, source] of [[gl.VERTEX_SHADER,vertex],[gl.FRAGMENT_SHADER,fragment]]) {
-      const shader = gl.createShader(kind);
-      gl.shaderSource(shader,source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
-      gl.attachShader(program,shader);
-      gl.deleteShader(shader);
-    }
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
-    return {
-      program,
-      attributes: Object.fromEntries(attributes.map(name => [name,gl.getAttribLocation(program,name)])),
-      uniforms: Object.fromEntries(uniforms.map(name => [name,gl.getUniformLocation(program,name)])),
-    };
+  upload(geometry) {const gl=this.gl,buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(geometry.data),gl.STATIC_DRAW);return {buffer,count:geometry.data.length/12};}
+  draw(mesh) {const gl=this.gl;gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);for(const a of this.attributes){gl.enableVertexAttribArray(a.loc);gl.vertexAttribPointer(a.loc,a.size,gl.FLOAT,false,48,a.offset);}gl.drawArrays(gl.TRIANGLES,0,mesh.count);}
+  render(camera, moving, dusk=0) {
+    const gl=this.gl,ratio=Math.min(devicePixelRatio||1,1.5),w=Math.floor(innerWidth*ratio),h=Math.floor(innerHeight*ratio);
+    if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}
+    gl.viewport(0,0,w,h);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.disable(gl.DEPTH_TEST);
+    for(const a of this.attributes)gl.disableVertexAttribArray(a.loc);
+    gl.useProgram(this.sky);gl.bindBuffer(gl.ARRAY_BUFFER,this.skyBuffer);const point=gl.getAttribLocation(this.sky,'aPoint');gl.enableVertexAttribArray(point);gl.vertexAttribPointer(point,2,gl.FLOAT,false,0,0);
+    gl.uniform1f(gl.getUniformLocation(this.sky,'uDusk'),dusk);gl.uniform1f(gl.getUniformLocation(this.sky,'uAspect'),w/h);gl.drawArrays(gl.TRIANGLES,0,6);gl.disableVertexAttribArray(point);
+    gl.enable(gl.DEPTH_TEST);gl.useProgram(this.p);
+    this.vp=multiply(perspective(camera.fov||Math.PI/3,w/h,0.15,1100),lookAt(camera.eye,camera.target));
+    gl.uniformMatrix4fv(this.locations.uVP,false,this.vp);gl.uniform3fv(this.locations.uEye,camera.eye);gl.uniform3fv(this.locations.uFog,[mix(0.86,0.64,dusk),mix(0.77,0.45,dusk),mix(0.61,0.47,dusk)]);gl.uniform1f(this.locations.uDusk,dusk);gl.uniform1i(this.locations.uWindows,0);
+    gl.uniform1i(this.locations.uSigns,1);
+    this.draw(this.static);gl.bindBuffer(gl.ARRAY_BUFFER,this.dynamic.buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(moving.data),gl.DYNAMIC_DRAW);this.dynamic.count=moving.data.length/12;this.draw(this.dynamic);
   }
-
-  buffer(data, usage) {
-    const gl = this.gl;
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
-    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),usage);
-    return buffer;
-  }
-
-  draw(camera, live, palette) {
-    const gl = this.gl, canvas = this.canvas;
-    const pixelRatio = Math.min(devicePixelRatio,1.5);
-    const width = Math.max(1,Math.round(canvas.clientWidth*pixelRatio));
-    const height = Math.max(1,Math.round(canvas.clientHeight*pixelRatio));
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
-    }
-    const aspect = width/height;
-    gl.viewport(0,0,width,height);
-    gl.clear(gl.DEPTH_BUFFER_BIT);
-    gl.disable(gl.DEPTH_TEST);
-    gl.useProgram(this.sky.program);
-    const sky = this.sky.uniforms;
-    gl.uniform3fv(sky.fog,palette.fog);
-    gl.uniform3fv(sky.zenith,palette.zenith);
-    gl.uniform3fv(sky.sun,palette.sun);
-    gl.uniform1f(sky.aspect,aspect);
-    const horizontal = Math.hypot(camera.eye[0]-camera.target[0],camera.eye[2]-camera.target[2]);
-    gl.uniform1f(sky.horizon,clamp((camera.eye[1]-camera.target[1])/horizontal,-1,1)*1.73);
-    gl.bindBuffer(gl.ARRAY_BUFFER,this.skyBuffer);
-    const skyPosition = this.sky.attributes.p;
-    gl.enableVertexAttribArray(skyPosition);
-    gl.vertexAttribPointer(skyPosition,2,gl.FLOAT,false,0,0);
-    gl.drawArrays(gl.TRIANGLES,0,3);
-    gl.disableVertexAttribArray(skyPosition);
-
-    gl.enable(gl.DEPTH_TEST);
-    gl.useProgram(this.scene.program);
-    const scene = this.scene.uniforms;
-    gl.uniformMatrix4fv(scene.vp,false,viewProjection(camera.eye,camera.target,aspect));
-    gl.uniform3fv(scene.eye,camera.eye);
-    gl.uniform3fv(scene.fog,palette.fog);
-    gl.uniform3fv(scene.light,palette.light);
-    const drawMesh = (buffer,count) => {
-      gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
-      for (const [name,size,offset] of [['p',3,0],['c',3,12],['uv',2,24]]) {
-        const attribute = this.scene.attributes[name];
-        gl.enableVertexAttribArray(attribute);
-        gl.vertexAttribPointer(attribute,size,gl.FLOAT,false,32,offset);
-      }
-      gl.drawArrays(gl.TRIANGLES,0,count);
-    };
-    drawMesh(this.cityBuffer,this.cityCount);
-    gl.bindBuffer(gl.ARRAY_BUFFER,this.liveBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(live.data),gl.DYNAMIC_DRAW);
-    drawMesh(this.liveBuffer,live.data.length/8);
-    for (const attribute of Object.values(this.scene.attributes)) gl.disableVertexAttribArray(attribute);
+  project(x,y,z) {
+    if(!this.vp)return null;const m=this.vp,w=m[3]*x+m[7]*y+m[11]*z+m[15];if(w<=0)return null;
+    return {x:((m[0]*x+m[4]*y+m[8]*z+m[12])/w*.5+.5)*innerWidth,y:(.5-(m[1]*x+m[5]*y+m[9]*z+m[13])/w*.5)*innerHeight};
   }
 }
