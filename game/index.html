@@ -25,9 +25,16 @@
 </div>
 <div id="hud" hidden>
   <div class="location"><span class="monogram small">S/S</span><div><strong>PORT SOLANO</strong><span id="district">MARINER DISTRICT</span></div><b id="clock">17:42 <small>☀</small></b></div>
-  <div class="status"><div id="wanted" aria-label="Wanted level"></div><div id="cash">$120</div><div class="health-row"><span>HEALTH</span><div class="health-track"><i id="health"></i></div></div><div id="ammo">PISTOL / 24</div><div id="mute">M / SOUND ON</div></div>
+  <div class="status">
+    <div id="wanted" aria-label="Wanted level"></div><div id="cash">$120</div>
+    <div class="health-row"><span>HEALTH</span><div class="health-track"><i id="health"></i></div></div>
+    <div id="ammo" aria-label="Pistol ammunition">PISTOL / 24</div><div id="mute">M / SOUND ON</div>
+  </div>
   <div class="job"><div class="eyebrow"><i></i> MARA QUINN <span id="job-name">01 / FIRST PICKUP</span></div><p id="objective"></p><div id="pickup-progress"><i></i></div></div>
-  <div id="dialogue" hidden><b>MARA QUINN / INCOMING</b><p id="dialogue-line"></p></div><div id="arrest" hidden></div>
+  <div id="dialogue" aria-live="polite" hidden>
+    <b>MARA QUINN / INCOMING</b><p id="dialogue-line"></p>
+  </div>
+  <div id="arrest" hidden></div>
   <div id="beacon-label"><span>◆</span><b id="marker-name"></b><small id="marker-distance"></small></div>
   <div class="map-wrap"><div class="map-heading"><b>PORT SOLANO</b><span>N ↑</span></div><canvas id="minimap" width="250" height="220" aria-label="Live street map"></canvas><div class="map-footer"><span><i></i> YOUR LOCATION</span><span id="map-target">◆ PICKUP</span></div></div>
   <div id="notice"></div>
@@ -36,9 +43,22 @@
   <div id="controls"><span><kbd>WASD</kbd> MOVE</span><span><kbd>E</kbd> CAR</span><span><kbd>SHIFT</kbd> RUN</span><span><kbd>SPACE</kbd> JUMP</span><span><kbd>P</kbd> PAUSE</span></div>
   <div class="build-tag">SOLANO STREETS <span>EARLY DAYS / 01</span></div>
 </div>
-<div id="complete" hidden><div class="eyebrow">MARA QUINN SENDS HER REGARDS</div><h2>JOB COMPLETE<span>↗</span></h2><div><span id="completion-name">First Pickup</span><b id="completion-reward">+$750</b></div><p>Another job. A little more freedom. Ammo restocked.</p></div>
-<div id="outcome" hidden><h2 id="outcome-title"></h2><p>20% CASH LOST / A FRESH START</p></div>
-<div id="story" class="modal" hidden><div class="panel"><span class="eyebrow">FIVE JOBS. ONE WAY OUT.</span><h2>The coast is yours.</h2><p>Mara paid her debts. Dante caught the morning ferry. Rae Vega stayed. For once, the next turn is hers to choose.</p><p>TOTAL JOB EARNINGS <b id="story-earnings"></b></p><button id="free-roam">CONTINUE FREE ROAM <span>→</span></button></div></div>
+<div id="complete" role="status" hidden>
+  <div class="eyebrow">MARA QUINN SENDS HER REGARDS</div><h2>JOB COMPLETE<span>↗</span></h2>
+  <div><span id="completion-name">First Pickup</span><b id="completion-reward">+$750</b></div>
+  <p>Your payment is in. Your ammo is restocked.</p>
+</div>
+<div id="outcome" role="status" hidden>
+  <h2 id="outcome-title"></h2><p>20% CASH LOST / A FRESH START</p>
+</div>
+<div id="story" class="modal" hidden>
+  <div class="panel">
+    <span class="eyebrow">FIVE JOBS. ONE WAY OUT.</span><h2>The coast is yours.</h2>
+    <p>Mara settled the account. Dante took the ferry out at dawn. Rae Vega kept the keys. There are still streets she hasn't seen.</p>
+    <p>TOTAL JOB EARNINGS <b id="story-earnings"></b></p>
+    <button id="free-roam">CONTINUE FREE ROAM <span>→</span></button>
+  </div>
+</div>
 <div id="pause" class="modal" hidden><div class="panel"><span class="eyebrow">TAKE A BREATHER</span><h2>City on hold.</h2><p>Your next move can wait.</p><button id="resume">BACK TO THE STREETS <span>→</span></button><button id="save" class="secondary">SAVE GAME <span>↓</span></button><button id="menu" class="text-button">RETURN TO TITLE</button><small id="save-result">P / ESC TO RESUME &nbsp; · &nbsp; K TO QUICK SAVE</small></div></div>
 <div id="error" class="modal" hidden><div class="panel"><h2>Couldn't start the engine.</h2><p id="error-message"></p></div></div>
 <script type="module" src="./src/main.js"></script>

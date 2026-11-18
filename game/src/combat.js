@@ -1,31 +1,59 @@
 import { distance } from './random.js';
-import { crime, cue, policeSees } from './justice.js';
 import { clearSight } from './ai.js';
+import { crime, cue, policeSees } from './justice.js';
 
-export function attack(state,kind,yaw=state.player.yaw) {
-  if(!state.started||state.paused||state.car||state.time<state.nextAttack)return false;
-  const shoot=kind==='shoot';
-  if(shoot&&state.ammo<=0){state.notice='Out of ammo. Complete a job to restock.';state.noticeTime=2;return false;}
-  state.nextAttack=state.time+(shoot?.3:.65);if(shoot)state.ammo--;
-  cue(state,shoot?'gunshot':'punch');
-  const p=state.player,sx=Math.sin(yaw),sz=Math.cos(yaw);let target=null,best=shoot?85:2.05;
-  for(const q of [...state.world.peds,...state.world.cars]) {
-    if(!shoot&&q.model!==undefined)continue;
-    if(q.down>0)continue;
-    const dx=q.x-p.x,dz=q.z-p.z,along=dx*sx+dz*sz,side=Math.abs(dx*sz-dz*sx),d=distance(p,q);
-    if((shoot?along>0&&side<(q.model!==undefined?1.35:.55)&&along<best:d<best)&&Math.abs((q.y||0)-p.y)<2.5&&clearSight(state.world,p,q)) {target=q;best=shoot?along:d;}
+function shotRange(world,origin,direction) {
+  let range=85;
+  for(const wall of world.buildings) {
+    if(origin.y+1.25>=wall.h)continue;
+    let entry=0,exit=range;
+    for(const [axis,size] of [['x','w'],['z','l']]) {
+      const low=wall[axis]-wall[size]/2,high=wall[axis]+wall[size]/2,velocity=direction[axis];
+      if(Math.abs(velocity)<1e-8) {
+        if(origin[axis]<low||origin[axis]>high){exit=-1;break;}
+      } else {
+        const a=(low-origin[axis])/velocity,b=(high-origin[axis])/velocity;
+        entry=Math.max(entry,Math.min(a,b));exit=Math.min(exit,Math.max(a,b));
+      }
+    }
+    if(exit>=entry)range=Math.min(range,entry);
   }
-  if(shoot){state.tracer={x:p.x,z:p.z,y:p.y+1.25,ex:p.x+sx*best,ez:p.z+sz*best,time:.09};crime(state,'gunfire');}
-  else if(policeSees(state))crime(state,'assault');
-  if(!target)return true;
-  target.flash=.18;target.hits=(target.hits||0)+1;
-  if(target.model!==undefined) {
-    target.damage=(target.damage||0)+(shoot?12:2);
-    if(target.police&&target.hits>=3)target.disabled=12;
-    if(!target.police)crime(state,'vehicle');
+  return range;
+}
+export function attack(state,kind,yaw=state.player.yaw) {
+  if(!state.started||state.paused||state.car||state.nextAttack>state.time)return false;
+  const firing=kind==='shoot';
+  if(firing&&state.ammo<1){state.notice='Out of ammo. Complete a job to restock.';state.noticeTime=2;return false;}
+  state.nextAttack=state.time+(firing?.3:.65);
+  if(firing)state.ammo--;
+  cue(state,firing?'gunshot':'punch');
+  const player=state.player,forward={x:Math.sin(yaw),z:Math.cos(yaw)};
+  let nearest=null,range=firing?shotRange(state.world,player,forward):2.05;
+  for(const body of [...state.world.peds,...state.world.cars]) {
+    const vehicle=body.model!==undefined;
+    if(body.down>0||(!firing&&vehicle)||Math.abs((body.y||0)-player.y)>=2.5)continue;
+    const dx=body.x-player.x,dz=body.z-player.z,depth=dx*forward.x+dz*forward.z;
+    const lateral=Math.abs(dx*forward.z-dz*forward.x);
+    const valid=firing?depth>0&&depth<range&&lateral<(vehicle?1.35:.55):distance(body,player)<range;
+    if(valid&&clearSight(state.world,player,body)){nearest=body;range=firing?depth:distance(body,player);}
+  }
+  if(firing) {
+    state.tracer={x:player.x,z:player.z,y:player.y+1.25,ex:player.x+forward.x*range,ez:player.z+forward.z*range,time:.09};
+    crime(state,'gunfire');
+  }
+  if(!nearest)return true;
+  if(!firing&&policeSees(state))crime(state,'assault');
+  nearest.flash=.18;nearest.hits=(nearest.hits||0)+1;
+  if(nearest.model!==undefined) {
+    nearest.damage=(nearest.damage||0)+(firing?12:2);
+    if(nearest.police&&nearest.hits>=3)nearest.disabled=12;
+    if(!nearest.police)crime(state,'vehicle');
   } else {
-    if(!target.police||!shoot||target.hits>=3){target.down=target.police?12:8;target.x+=sx*.9;target.z+=sz*.9;target.hits=0;}
-    if(target.police)crime(state,'officer');
+    if(!nearest.police||!firing||nearest.hits>=3) {
+      nearest.down=nearest.police?12:8;nearest.hits=0;
+      nearest.x+=forward.x*.9;nearest.z+=forward.z*.9;
+    }
+    if(nearest.police)crime(state,'officer');
   }
   return true;
 }

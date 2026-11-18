@@ -28,13 +28,16 @@ test('walking runs, jumps, and cannot pass through a wall',()=>{
   assert.ok(s.player.z>=-1.161);assert.equal(s.player.y,0);
 });
 test('enter any model, accelerate, brake, reverse, handbrake, and exit',()=>{
-  for(let model=0;model<3;model++){
-    const w=emptyWorld(),c=makeCar('hero',0,0,model,Math.PI);w.cars.push(c);const s=createState(w);s.started=true;Object.assign(s.player,{x:2,z:0});
-    assert.ok(interact(s));assert.equal(s.car,c);
-    for(let n=0;n<120;n++)step(s,input('KeyW'),1/60);assert.ok(c.speed>10);
-    const fast=c.speed;for(let n=0;n<60;n++)step(s,input('Space'),1/60);assert.ok(c.speed<fast/4);
-    for(let n=0;n<120;n++)step(s,input('KeyS'),1/60);assert.ok(c.speed<0);
-    c.speed=0;assert.ok(interact(s));assert.equal(s.car,null);assert.ok(Math.hypot(s.player.x-c.x,s.player.z-c.z)>1.9);
+  for(const model of [0,1,2]) {
+    const city=emptyWorld(),owned=makeCar('hero',0,0,model,Math.PI);city.cars.push(owned);
+    const state=createState(city);state.started=true;Object.assign(state.player,{x:2,z:0});
+    assert.equal(interact(state),true);assert.equal(state.car,owned);assert.equal(state.wanted,0);
+    const tick=(key,frames)=>{for(let n=0;n<frames;n++)step(state,input(key),1/60);};
+    tick('KeyW',120);const cruising=owned.speed;assert.ok(cruising>10);
+    tick('Space',60);assert.ok(owned.speed<cruising*.25);
+    tick('KeyS',120);assert.ok(owned.speed<0);
+    owned.speed=0;assert.equal(interact(state),true);assert.equal(state.car,null);
+    assert.ok(Math.hypot(state.player.x-owned.x,state.player.z-owned.z)>1.9);
   }
 });
 test('fast cars collide with walls and other cars',()=>{
@@ -54,16 +57,24 @@ test('traffic and pedestrians actually move',()=>{
   assert.ok(Math.hypot(car.x-before.cx,car.z-before.cz)>.5);assert.ok(Math.hypot(p.x-before.px,p.z-before.pz)>.5);
 });
 test('mission requires a car and a slow stop, updates marker, and pays once',()=>{
-  const s=createState(emptyWorld());s.started=true;Object.assign(s.player,JOB.pickup);assert.equal(advanceMission(s,2),null);assert.equal(s.mission,0);
-  s.car=makeCar('ride',JOB.pickup.x,JOB.pickup.z,0,0);s.car.speed=12;advanceMission(s,2);assert.equal(s.mission,0);
-  s.car.speed=0;assert.match(advanceMission(s,1.2),/Package secured/);assert.deepEqual(marker(s),JOB.delivery);
-  Object.assign(s.car,JOB.delivery);assert.match(advanceMission(s,1.2),/COMPLETE/);assert.equal(s.cash,870);assert.equal(marker(s).name,'Coast gate');advanceMission(s,10);assert.equal(s.cash,870);
+  const state=createState(emptyWorld());state.started=true;Object.assign(state.player,JOB.pickup);
+  assert.equal(advanceMission(state,2),null);assert.equal(state.mission,0);
+  const car=makeCar('hero',JOB.pickup.x,JOB.pickup.z);state.car=car;car.speed=12;
+  advanceMission(state,2);assert.equal(state.mission,0);
+  car.speed=0;assert.match(advanceMission(state,1.2),/Package secured/);assert.deepEqual(marker(state),JOB.delivery);
+  Object.assign(car,JOB.delivery);assert.match(advanceMission(state,1.2),/COMPLETE/);
+  assert.equal(state.cash,870);assert.equal(state.mission,2);assert.deepEqual(marker(state),{x:126,z:42,name:'Coast gate'});
+  assert.equal(state.ammo,24);advanceMission(state,10);assert.equal(state.cash,870);
 });
 test('save round-trip validates corrupted, unavailable, and hostile storage',()=>{
-  let data=null;const storage={getItem:()=>data,setItem:(key,value)=>{data=value;}};
-  const s=createState(emptyWorld());s.cash=870;s.mission=2;s.wanted=2;
-  assert.ok(saveGame(s,storage));const loaded=loadSave(storage);assert.equal(loaded.cash,870);assert.equal(loaded.mission,2);assert.equal(loaded.wanted,2);
-  data='broken';assert.equal(loadSave(storage),null);data='{"version":1,"x":null}';assert.equal(loadSave(storage),null);assert.equal(loadSave(null),null);assert.equal(saveGame(s,null),false);
+  let record;const storage={getItem:()=>record,setItem:(key,value)=>{record=value;}};
+  const state=createState(emptyWorld());Object.assign(state,{cash:870,mission:2,wanted:2,stage:3,ammo:8});
+  assert.equal(saveGame(state,storage),true);const restored=loadSave(storage);
+  for(const [field,value] of Object.entries({cash:870,mission:2,wanted:2,stage:3,ammo:8}))assert.equal(restored[field],value);
+  for(const corrupt of ['broken','{"version":1,"x":null}','{"version":2,"x":0,"z":0,"cash":1,"mission":0,"wanted":0}']){record=corrupt;assert.equal(loadSave(storage),null);}
+  const hostile={getItem(){throw Error('denied');},setItem(){throw Error('denied');}};
+  assert.equal(loadSave(hostile),null);assert.equal(saveGame(state,hostile),false);
+  assert.equal(loadSave(null),null);assert.equal(saveGame(state,null),false);
 });
 test('pause halts physics and staged views are deterministic and releasable',()=>{
   const s=createState(emptyWorld());s.paused=true;step(s,input(),1);assert.equal(s.time,0);

@@ -82,10 +82,14 @@ void main(){
  vec3 light=normalize(vec3(-0.6,0.9,-0.35)); float diffuse=max(dot(normalize(vNormal),light),0.0);
  vec3 albedo=vColor;
  if(vTex>1.5){albedo*=texture2D(uSigns,vUV).rgb;}
- else if(vTex>0.5){vec3 w=texture2D(uWindows,vUV).rgb;albedo*=w;
-   float pane=step(0.16,fract(vUV.x))*step(fract(vUV.x),0.80)*step(0.18,fract(vUV.y))*step(fract(vUV.y),0.78);
-   float selected=step(0.55,fract(sin(dot(floor(vUV),vec2(12.9898,78.233)))*437.1));
-   albedo=mix(albedo,vec3(1.0,0.76,0.35),pane*selected*uDusk*0.8);}
+ else if(vTex>0.5){
+   albedo*=texture2D(uWindows,vUV).rgb;
+   vec2 paneUV=fract(vUV);
+   vec2 inside=step(vec2(0.16,0.18),paneUV)*step(paneUV,vec2(0.80,0.78));
+   float room=fract(437.1*sin(dot(floor(vUV),vec2(12.9898,78.233))));
+   float glow=inside.x*inside.y*step(0.55,room)*uDusk*0.8;
+   albedo=mix(albedo,vec3(1.0,0.76,0.35),glow);
+ }
  vec3 lit=albedo*(vec3(0.48,0.53,0.57)+diffuse*vec3(0.62,0.49,0.32));
  lit=mix(lit,lit*vec3(0.76,0.72,0.96),uDusk*0.38);
  float fog=1.0-exp(-pow(distance(vPos,uEye)*0.0035,1.5));
@@ -98,6 +102,17 @@ vec3 high=mix(vec3(0.24,0.59,0.69),vec3(0.16,0.24,0.40),uDusk);vec3 col=mix(low,
 vec2 p=(vUV-vec2(0.72,0.68))*vec2(uAspect,1.0);float d=length(p);
 col+=vec3(0.20,0.11,0.03)*exp(-d*9.0);col=mix(col,vec3(1.0,0.91,0.64),1.0-smoothstep(0.030,0.033,d));
 gl_FragColor=vec4(col,1.0);}`;
+function billboardCanvas() {
+  const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;
+  const ink=canvas.getContext('2d');
+  ink.fillStyle='#173f44';ink.fillRect(0,0,canvas.width,canvas.height);
+  ink.fillStyle='#ffbd6b';ink.fillRect(12,12,canvas.width-24,4);ink.textAlign='center';
+  for(const [text,y,font,color] of [
+    ['VISIT PORT SOLANO',65,'bold 38px Arial','#fff0cf'],
+    ['YOUR NEXT CHAPTER STARTS HERE',100,'18px Arial','#86d7c2'],
+  ]){ink.font=font;ink.fillStyle=color;ink.fillText(text,canvas.width/2,y);}
+  return canvas;
+}
 export class Renderer {
   constructor(canvas, staticGeometry) {
     this.canvas=canvas;const gl=this.gl=canvas.getContext('webgl',{antialias:true,alpha:false,preserveDrawingBuffer:true});
@@ -113,9 +128,12 @@ export class Renderer {
     ctx.fillStyle='#ebe2be';ctx.fillRect(15,107,98,8);
     const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.generateMipmap(gl.TEXTURE_2D);
-    const sign=document.createElement('canvas');sign.width=512;sign.height=128;const sc=sign.getContext('2d');
-    sc.fillStyle='#173f44';sc.fillRect(0,0,512,128);sc.fillStyle='#ffbd6b';sc.fillRect(12,12,488,4);sc.textAlign='center';sc.fillStyle='#fff0cf';sc.font='bold 38px Arial';sc.fillText('VISIT PORT SOLANO',256,65);sc.font='18px Arial';sc.fillStyle='#86d7c2';sc.fillText('YOUR NEXT CHAPTER STARTS HERE',256,100);
-    gl.activeTexture(gl.TEXTURE1);const signTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,signTexture);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,sign);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.activeTexture(gl.TEXTURE0);
+    gl.activeTexture(gl.TEXTURE1);
+    const signTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,signTexture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,billboardCanvas());
+    for(const filter of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,filter,gl.LINEAR);
+    gl.activeTexture(gl.TEXTURE0);
     gl.enable(gl.DEPTH_TEST);this.vp=null;
   }
   upload(geometry) {const gl=this.gl,buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(geometry.data),gl.STATIC_DRAW);return {buffer,count:geometry.data.length/12};}

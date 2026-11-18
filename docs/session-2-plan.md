@@ -1,23 +1,27 @@
-# Session 2 implementation plan and ledger
+# Session 2 clean re-record: systems implementation and handoff
 
-The user's session-2 specification is the design authority. Extend the existing ES modules and batched raw-WebGL renderer in this directory only. No history, other implementations, credentials, network assets, browser launch, screenshot changes, commits, or remotes.
+The supplied session-2 request is the design and execution authority. All implementation is authored here in one session. No agents, previous implementations, history, credentials, downloads, browser runs, commits, remotes or pushes. The six designated files were deleted before their replacements were written. Existing files were read solely to establish interfaces and required behavior.
 
-Architecture: add focused AI, justice/combat, and synthesized-audio modules. Simulation owns fixed-step updates and event cues. Preserve mission states 0/1 for First Pickup; state 2 begins Checkpoint Run. Save explicit stage/timer fields with validated version-1 compatibility. Rooftop access uses a visible exterior stairway with a walkable ramp surface.
+Architecture: keep seeded ES modules and batched raw WebGL. Simulation owns fixed steps and sound events; AI owns street routing, signals and pedestrians; justice owns crimes, pursuit, detention and recovery; combat owns horizontal targeting; audio owns gesture-created synthesized voices. Mission progression stays compatible with the version-1 save format.
 
-- [x] Write focused failing headless tests for crimes/police, recovery, traffic signals/gaps, combat, mission chain/retries, rooftop access, and persistence.
-- [x] Implement AI and justice/combat; integrate movement, collisions, and event cues.
-- [x] Implement missions 2–5, save sanitation, dialogue, timers, rewards, and free roam.
-- [x] Add synthesized sound, HUD/input, street props, lights, and chase shot composition.
-- [x] Run source checks, core/system tests, in-process serving, repeat packaging, and runtime-network scan once; fix blockers only. Update README and handoff with evidence and limitations.
+## Work sequence
 
-Review focus: failed missions remain retryable; police cannot bust during staging or menus; save recovery restores required mission vehicles; rooftop is physically reachable; audio remains silent until a gesture and respects mute/pause.
+- [x] Replace systems tests with behavioral coverage for traffic, pedestrians, crimes, pursuit counts, recovery, combat, missions, saves, stairs, audio and cruiser takeover.
+- [x] Write AI, justice, combat and audio afresh, preserving public exports and later patrol recovery behavior.
+- [x] Re-author systems integration in input/simulation/missions, HUD/main, world/render, shots, markup/styles and core tests. Preserve passenger geometry, rooftop camera, mission traversal and staged frame margins.
+- [x] Self-review against the request and unchanged polish/chase tests; fix blocking failures only.
+- [x] Run syntax, 32-test suite, chase, in-process serving and packaging checks. Build twice, compare bytes, report sizes and scan runtime sources for networking.
 
-Ruling: use the supplied workspace and execute inline; the user explicitly requires all work here, no commits, and an economical acceptance pass. Do not create worktrees or run workflow helpers that inspect history. The detailed specification authorizes implementation without an additional design approval loop.
+Review focus: an occupied cruiser must relinquish AI ownership; detention/recovery must leave a retryable and saveable mission; repo delivery must require the exact target; timers must respect bank range; audio must not allocate or emit before a gesture. Patrols must preserve road waypoints, brake for turns and recover from obstruction without regressing the supplied chase metric.
 
-Implementation evidence: initial focused suite failed on missing new system modules; implementation brought core + systems to 18/18. Review regressions then reproduced wrong-car repo delivery, delayed recovery saves, and low rooftop camera targeting; fixed at their owning modules, suite 21/21. Added coverage for actual red-light stops, pedestrian crossing/flight/separation and gesture/mute/pause audio lifecycle; focused systems suite 12/12. Existing driving test now uses the owned hero so police pursuit does not confound its control assertions. First Pickup completion now expects the next checkpoint marker.
+Execution decisions: use the requested workspace directly and retain the raw renderer; no extra approval, worktree, commit or agent workflow. The user has supplied a detailed design and explicitly authorized implementation. Keep existing reward values ($750/$900/$1,100/$1,250/$2,500), eight-second crime cooldowns, seven-second retry grace and current shot cameras as compatibility requirements. Session-1 and session-3 handoff sections remain intact.
 
-Ruling: mission 2–4 rewards are $900/$1,100/$1,250; the request leaves these amounts open. Total story earnings are $6,500. Timed routes reset immediately; damaged repo targets are replaced; busted/wasted retries get seven seconds of breathing room. These choices need browser difficulty tuning if too easy or hard.
+## Evidence
 
-Final review: one fresh read-only reviewer inspected current files without history or other implementations. Sole important finding: a stolen police car remained AI-controlled and saw itself. Regression failed first; takeover now clears police AI ownership, retains cruiser visuals, and spawns an independent pursuit car. Full suite 24/24.
+The replacement tests were written before the replacement modules. Their first run failed with ERR_MODULE_NOT_FOUND after the required deletions. The first integrated acceptance run passed 31/32 tests and exposed a real sampled-sight gap: a pistol could hit through a thin building between sample points. Combat now computes exact building-ray range before selecting a target; the same regression passes. This change leaves patrol sight/routing behavior alone.
 
-Acceptance: syntax PASS (13 modules); core/systems PASS 24/24; in-process HTTP PASS 5/5; repeat package bytes identical; dossier 172,890 bytes; game 15 files / 84,562 bytes; index 4,894 bytes; runtime request scan empty; all three README live badges retained; static/actor geometry finite (107,703 / 46,440 vertices). The initial Node child-process syntax wrapper encountered EPERM; rerunning each actual `node --check` directly from the shell succeeded. No game changes after acceptance. No browser attempt, screenshots, commit, remote, or push. No deferred concrete review defects; browser-only behavior remains unverified as described in the handoff.
+Final code acceptance: all 13 game modules and both edited test modules pass node --check; full suite 32/32; standalone chase preserves 12.15 stuck patrol-seconds; serve-check passes 17/17 in-process routes; package-check passes with all 19 output files byte-identical across its two builds. Game is 15 files / 91,349 bytes, index.html 5,046 bytes. Runtime networking scan has no matches. Packaging is repeated after handoff edits; final dossier size is recorded in the session response.
+
+Final review: author self-review, with no sub-agents per the user's explicit instruction. Checked exported interfaces, mission retry/save paths, vehicle ownership, sound lifecycle, collision events, exact-wall clipping and the unchanged polish checks. No unresolved blocking issue found. No browser or independent-review claim is made.
+
+Known gameplay limits: grid/proximity AI still spends 12.15 patrol-seconds stopped in the scripted chase; horizontal assisted aiming and temporary civilian falls are intentionally simple. Browser rendering, console, shader compilation, actual audio, HUD overlap, pointer lock, performance, passenger visibility and practical mission difficulty require the later browser session. Protected files and supplied screenshots remain untouched. No commits, remotes or pushes.

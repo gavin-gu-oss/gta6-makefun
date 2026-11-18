@@ -6,7 +6,16 @@ import { crime, updateJustice, damage, cue } from './justice.js';
 import { attack } from './combat.js';
 
 export function createState(world) {
-  return {world,player:{x:0,z:17,y:0,yaw:Math.PI,vy:0,moving:false},car:null,cash:120,health:100,wanted:0,mission:0,stage:0,timer:90,vaultTime:0,earnings:0,ammo:24,events:[],crimeCooldown:{},lastCrime:-100,lastSeen:-100,lastDamage:-100,decayClock:0,arrest:0,nextRam:0,invulnerable:0,outcome:'',outcomeTime:0,retryDelay:0,nextAttack:0,dialogue:[],dialogueTime:0,storyComplete:false,storyScreen:false,lastMission:'First Pickup',lastReward:750,missionRevision:0,pickupTime:0,banner:0,time:0,paused:false,started:false,notice:'',noticeTime:0,shot:null,shotReleased:false,camera:null};
+  return {
+    world,player:{x:0,z:17,y:0,yaw:Math.PI,vy:0,moving:false},car:null,
+    time:0,started:false,paused:false,shot:null,shotReleased:false,camera:null,notice:'',noticeTime:0,
+    cash:120,earnings:0,health:100,ammo:24,wanted:0,
+    crimeCooldown:{},lastCrime:-100,lastSeen:-100,lastDamage:-100,decayClock:0,
+    arrest:0,nextRam:0,invulnerable:0,outcome:'',outcomeTime:0,nextAttack:0,
+    mission:0,stage:0,timer:90,vaultTime:0,retryDelay:0,pickupTime:0,missionRevision:0,
+    banner:0,lastMission:'First Pickup',lastReward:750,dialogue:[],dialogueTime:0,
+    storyComplete:false,storyScreen:false,events:[],
+  };
 }
 export function carBounds(car) {
   const m=MODELS[car.model],s=Math.abs(Math.sin(car.yaw)),c=Math.abs(Math.cos(car.yaw));
@@ -49,33 +58,69 @@ export function interact(state) {
   let nearest=null,d=4;
   for(const car of state.world.cars){const n=distance(state.player,car);if(n<d&&Math.abs(car.speed)<12){d=n;nearest=car;}}
   if(nearest){
-    if(nearest.id!=='hero'&&!nearest.owned){crime(state,'theft');nearest.owned=true;}
-    if(nearest.police){nearest.police=false;nearest.cruiser=true;nearest.disabled=0;}
-    nearest.traffic=false;nearest.speed=0;state.car=nearest;state.player.y=0;notify(state,MODELS[nearest.model].name+'  ·  W/S drive  ·  Space handbrake',3);return true;
+    const stolen=nearest.id!=='hero'&&!nearest.owned;
+    if(stolen){nearest.owned=true;crime(state,'theft');}
+    // A cruiser keeps its livery but gives up pursuit ownership on takeover.
+    if(nearest.police)Object.assign(nearest,{police:false,cruiser:true,disabled:0});
+    Object.assign(nearest,{traffic:false,speed:0});state.car=nearest;state.player.y=0;
+    notify(state,`${MODELS[nearest.model].name}  ·  W/S drive  ·  Space handbrake`,3);return true;
   }
   notify(state,'Get closer to a car, then press E.');return false;
 }
 export function groundAt(world,p) {
-  const r=world.rooftop;if(!r)return 0;
-  if(Math.abs(p.x-r.stairX)<1.6&&p.z>=r.stairStart-1&&p.z<=r.stairEnd)return clamp((p.z-r.stairStart)/(r.stairEnd-r.stairStart),0,1)*r.y;
-  if(p.y>=r.y-.6&&((Math.abs(p.x-r.x)<r.w/2+.2&&Math.abs(p.z-r.z)<r.l/2+.2)||(p.x>=r.x&&p.x<=r.stairX+1.5&&Math.abs(p.z-r.stairEnd)<2)))return r.y;
-  return 0;
+  const roof=world.rooftop;if(!roof)return 0;
+  const onStairs=Math.abs(p.x-roof.stairX)<1.6&&p.z>=roof.stairStart-1&&p.z<=roof.stairEnd;
+  if(onStairs) {
+    const progress=clamp((p.z-roof.stairStart)/(roof.stairEnd-roof.stairStart),0,1);
+    return progress*roof.y;
+  }
+  if(p.y<roof.y-.6)return 0;
+  const onRoof=Math.abs(p.x-roof.x)<roof.w/2+.2&&Math.abs(p.z-roof.z)<roof.l/2+.2;
+  const onLanding=p.x>=roof.x&&p.x<=roof.stairX+1.5&&Math.abs(p.z-roof.stairEnd)<2;
+  return onRoof||onLanding?roof.y:0;
+}
+function vehicleImpact(state,car,impact,struck) {
+  car.speed*=-.18;
+  if(impact<=3)return;
+  damage(state,impact*.65);car.damage=(car.damage||0)+impact*.9;car.flash=.15;cue(state,'crash');
+  if(struck)crime(state,'vehicle');
+  if(impact>9)notify(state,'Easy, Vega. This ride still has to get you home.',2);
+}
+function hitPedestrians(state,car) {
+  if(Math.abs(car.speed)<=3)return;
+  for(const person of state.world.peds) {
+    if(person.down>0||distance(car,person)>=1.7)continue;
+    person.down=9;person.flash=.2;car.damage=(car.damage||0)+3;
+    damage(state,2);crime(state,'pedestrian');cue(state,'crash');
+  }
+}
+function onFootActions(state,input) {
+  const player=state.player;
+  if(input.punch)attack(state,'punch',input.yaw);
+  if(input.fire)attack(state,'shoot',input.yaw);
+  for(const vehicle of state.world.cars) {
+    if(Math.abs(vehicle.speed)<=6||distance(vehicle,player)>=1.8||player.y>=1.5||state.time<=state.nextRam)continue;
+    state.nextRam=state.time+1;damage(state,Math.abs(vehicle.speed)*1.6);
+    player.x+=Math.cos(vehicle.yaw)*2;player.z-=Math.sin(vehicle.yaw)*2;
+    resolveBody(state.world,player,.34,.34);cue(state,'crash');
+  }
 }
 export function step(state,input,dt) {
   if(state.paused)return;
   state.time+=dt;state.banner=Math.max(0,state.banner-dt);state.noticeTime=Math.max(0,state.noticeTime-dt);
   input.orbitTime=Math.max(0,input.orbitTime-dt);
-  if(!state.shot||state.shotReleased){updateTraffic(state,dt);updatePedestrians(state,dt);}
+  const staged=state.shot&&!state.shotReleased;
+  if(!staged){updateTraffic(state,dt);updatePedestrians(state,dt);}
   if(!state.started)return;
-  if(state.shot&&!state.shotReleased)return;
+  if(staged)return;
   const car=state.car,p=state.player;
   state.dialogueTime=Math.max(0,state.dialogueTime-dt);
-  if(state.tracer){state.tracer.time-=dt;if(state.tracer.time<=0)state.tracer=null;}
-  for(const c of state.world.cars)c.flash=Math.max(0,(c.flash||0)-dt);
+  if(state.tracer&&(state.tracer.time-=dt)<=0)state.tracer=null;
+  for(const vehicle of state.world.cars)vehicle.flash=Math.max(0,(vehicle.flash||0)-dt);
   if(car) {
     const m=MODELS[car.model],throttle=(input.down('KeyW','ArrowUp')?1:0)-(input.down('KeyS','ArrowDown')?1:0);
     const brake=input.down('Space'),steer=(input.down('KeyA','ArrowLeft')?1:0)-(input.down('KeyD','ArrowRight')?1:0);
-    car.braking=brake||throttle*car.speed<0;
+    car.braking=!!brake||throttle*car.speed<0;
     car.speed+=throttle*m.accel*dt*(throttle*car.speed<0?2.5:1);
     car.speed*=Math.exp(-(brake?3.3:throttle?0.18:0.85)*dt);car.speed=clamp(car.speed,-10,m.max);
     if(Math.abs(car.speed)<.07)car.speed=0;
@@ -84,10 +129,10 @@ export function step(state,input,dt) {
     const parts=Math.max(1,Math.ceil(Math.abs(car.speed)*dt/.45));
     for(let i=0;i<parts;i++) {
       car.x+=Math.sin(car.yaw)*car.speed*dt/parts;car.z+=Math.cos(car.yaw)*car.speed*dt/parts;
-      for(const q of state.world.peds)if(!(q.down>0)&&distance(car,q)<1.7&&Math.abs(car.speed)>3){q.down=9;q.flash=.2;damage(state,2);car.damage=(car.damage||0)+3;crime(state,'pedestrian');cue(state,'crash');}
+      hitPedestrians(state,car);
       const struck=state.world.cars.find(q=>q!==car&&distance(car,q)<3.8);
       const b=carBounds(car);
-      if(resolveBody(state.world,car,b.w/2,b.l/2,car)) {const impact=Math.abs(car.speed);car.speed*=-.18;if(impact>3){damage(state,impact*.65);car.damage=(car.damage||0)+impact*.9;car.flash=.15;cue(state,'crash');if(struck)crime(state,'vehicle');if(impact>9)notify(state,'Easy, Vega. This ride still has to get you home.',2);}break;}
+      if(resolveBody(state.world,car,b.w/2,b.l/2,car)){vehicleImpact(state,car,Math.abs(car.speed),struck);break;}
     }
     p.x=car.x;p.z=car.z;p.yaw=car.yaw;p.moving=false;
     if(input.orbitTime===0)input.yaw+=angleDelta(input.yaw,car.yaw)*Math.min(1,dt*3);
@@ -103,17 +148,17 @@ export function step(state,input,dt) {
     const floor=groundAt(state.world,p);
     if(input.jump&&p.y<=floor+.12)p.vy=6.4;
     p.vy-=16*dt;p.y=Math.max(floor,p.y+p.vy*dt);if(p.y===floor)p.vy=0;
-    if(input.punch)attack(state,'punch',input.yaw);
-    if(input.fire)attack(state,'shoot',input.yaw);
-    for(const c of state.world.cars)if(Math.abs(c.speed)>6&&distance(c,p)<1.8&&p.y<1.5&&state.time>state.nextRam){state.nextRam=state.time+1;damage(state,Math.abs(c.speed)*1.6);p.x+=Math.cos(c.yaw)*2;p.z-=Math.sin(c.yaw)*2;resolveBody(state.world,p,.34,.34);cue(state,'crash');}
+    onFootActions(state,input);
   }
-  input.jump=false;input.punch=false;input.fire=false;
-  const message=advanceMission(state,dt);if(message)notify(state,message,6);
+  for(const action of ['jump','punch','fire'])input[action]=false;
+  const message=advanceMission(state,dt);
+  if(message)notify(state,message,6);
   updateJustice(state,dt);
 }
 export function followCamera(state,input,dt) {
   const p=state.car||state.player,d=state.car?9.7:6.8,pitch=input.pitch;
-  const target=[p.x,1.25+(state.car?0:state.player.y),p.z];
+  const height=state.car?0:state.player.y;
+  const target=[p.x,height+1.25,p.z];
   let eye=[p.x-Math.sin(input.yaw)*d, target[1]+2+pitch*6,p.z-Math.cos(input.yaw)*d];
   // Shorten the camera ray before it enters a building; keep walls out of the view.
   for(let f=.08;f<1;f+=.06) {

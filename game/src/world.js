@@ -22,8 +22,11 @@ export function createWorld(seed=1) {
       const m=MIN+j*BLOCK;
       box(n,.245,m,12.2,.025,12.2,P.road);
       for(let stripe=-4;stripe<=4;stripe+=2){box(n+stripe,.265,m+8,1,.022,3,[.84,.83,.68]);box(n+8,.265,m+stripe,3,.022,1,[.84,.83,.68]);}
-      signals.push({x:n,z:m});
-      for(const side of [-1,1]){box(n+side*7,2.2,m+side*7,.15,4,.15,[.21,.27,.27]);box(n+side*7,4.3,m+side*7,.7,1.5,.5,[.12,.19,.21]);}
+      const junction={x:n,z:m};signals.push(junction);
+      for(const offset of [-7,7]) {
+        box(junction.x+offset,2.2,junction.z+offset,.15,4,.15,[.21,.27,.27]);
+        box(junction.x+offset,4.3,junction.z+offset,.7,1.5,.5,[.12,.19,.21]);
+      }
     }
   }
   const colors=[[.79,.67,.50],[.67,.75,.70],[.84,.57,.43],[.78,.77,.64],[.62,.68,.69],[.88,.79,.59]];
@@ -38,49 +41,68 @@ export function createWorld(seed=1) {
     box(cx,h/2+.2,cz,w,h,l,color,1);solid(cx,cz,w,l,0,h);buildings.push({x:cx,z:cz,w,l,h});
     box(cx,h+.38,cz,w+.5,.6,l+.5,color.map(v=>v*.88));box(cx+2,h+1.1,cz-2,3.2,1.3,4,[.48,.53,.51]);
     if(ix===2&&iz===3) {
-      rooftop={x:cx,z:cz,w,l,y:h+.76,stairX:cx+w/2+1.6,stairStart:cz-l/2-1,stairEnd:cz+l/2};
-      const r=rooftop,count=28;
-      for(let k=0;k<count;k++){const depth=(r.stairEnd-r.stairStart)/count,top=(k+1)/count*r.y;box(r.stairX,top/2,r.stairStart+(k+.5)*depth,2.7,top,depth,[.56,.68,.61]);}
-      box((cx+r.stairX)/2,r.y-.1,r.stairEnd,r.stairX-cx+3,.2,3.8,[.23,.54,.49]);
-      for(const z of [r.stairStart,r.stairEnd]){box(r.stairX+1.5,2.4,z,.2,4.4,.2,[.94,.69,.29]);}
+      const east=cx+w*.5+1.6,start=cz-l*.5-1,end=cz+l*.5;
+      rooftop={x:cx,z:cz,w,l,y:h+.76,stairX:east,stairStart:start,stairEnd:end};
+      const depth=(end-start)/28;
+      for(let step=1;step<=28;step++) {
+        const rise=rooftop.y*step/28;
+        box(east,rise*.5,start+(step-.5)*depth,2.7,rise,depth,[.56,.68,.61]);
+      }
+      box((cx+east)*.5,rooftop.y-.1,end,east-cx+3,.2,3.8,[.23,.54,.49]);
+      for(const z of [start,end])box(east+1.5,2.4,z,.2,4.4,.2,[.94,.69,.29]);
       box(cx,h+.75,cz,w-.3,.08,l-.3,[.22,.50,.46]);
     }
     box(cx,2.5,cz-l/2-.22,w+.4,.7,.7,[.17,.47,.45]);box(cx,1.3,cz-l/2-.25,2.1,2.4,.14,[.16,.29,.31]);
-    if((ix+iz)%4===0) {
-      box(cx,7,cz-l/2-1.2,10,3.2,.3,[.14,.35,.37]);
-      g.quad([cx+4.8,5.5,cz-l/2-1.4],[cx-4.8,5.5,cz-l/2-1.4],[cx-4.8,8.5,cz-l/2-1.4],[cx+4.8,8.5,cz-l/2-1.4],[0,0,-1],[1,1,1],2);
-    }
+    if((ix+iz)%4===0)tourismSign(g,cx,cz-l/2);
   }
   for(let i=0;i<9;i++)for(let j=0;j<8;j++) {
     const x=MIN+i*BLOCK+8.2,z=MIN+j*BLOCK+20;
     if((i+j)%2===0){palm(g,x,z,6+rng()*2);solid(x,z,.65,.65,0,8,'palm');}
     box(x,3,z+10,.13,5.6,.13,[.22,.29,.28]);box(x-1.1,5.6,z+10,2.3,.16,.25,[.29,.33,.30]);box(x-2.1,5.5,z+10,.7,.14,.5,[1,.83,.47]);solid(x,z+10,.35,.35,0,5,'lamp');
-    if((i+j)%3===0){box(x,.62,z-5,.45,.8,.45,[.84,.28,.17]);box(x,1.1,z-5,.6,.2,.6,[.97,.65,.32]);solid(x,z-5,.6,.6,0,1.2,'hydrant');}
-    if((i+j)%4===0){box(x,.7,z+4,1.5,.15,3,[.57,.42,.29]);box(x+.6,1.1,z+4,.15,.9,3,[.45,.36,.26]);solid(x,z+4,1.5,3,0,1.5,'bench');}
-    if(i%3===0&&j%3===0){box(x,2.7,z+2,2.8,.18,5,[.21,.52,.50]);for(const dz of [-2,2])box(x+1,1.5,z+2+dz,.12,2.6,.12,[.55,.65,.62]);box(x+1,1.4,z+2,.1,2.3,4,[.33,.54,.57]);}
+    const furnishing=(i+j);
+    if(furnishing%3===0) {
+      box(x,.62,z-5,.45,.8,.45,[.84,.28,.17]);box(x,1.1,z-5,.6,.2,.6,[.97,.65,.32]);
+      solid(x,z-5,.6,.6,0,1.2,'hydrant');
+    }
+    if(furnishing%4===0) {
+      box(x,.7,z+4,1.5,.15,3,[.57,.42,.29]);box(x+.6,1.1,z+4,.15,.9,3,[.45,.36,.26]);
+      solid(x,z+4,1.5,3,0,1.5,'bench');
+    }
+    if(i%3===0&&j%3===0) {
+      const stopZ=z+2;box(x,2.7,stopZ,2.8,.18,5,[.21,.52,.50]);
+      for(const end of [-2,2])box(x+1,1.5,stopZ+end,.12,2.6,.12,[.55,.65,.62]);
+      box(x+1,1.4,stopZ,.1,2.3,4,[.33,.54,.57]);
+    }
   }
   for(let z=-160;z<170;z+=18){palm(g,184,z,7+rng()*2);solid(184,z,.7,.7,0,9,'palm');}
   for(let z=-135;z<150;z+=30){box(193,.85,z,3.4,.12,1.6,[.87,.74,.49]);box(193,.4,z,2,.8,.16,[.50,.42,.31]);solid(193,z,3.4,1.6,0,1,'bench');}
   for(let i=0;i<24;i++){const h=18+rng()*65;box(-205-i%3*17,h/2,-220+i*19,12+rng()*10,h,12,[.40,.51,.53]);}
   cars.push(makeCar('hero',-3.1,17,2,Math.PI));
-  cars.push(makeCar('repo',164,58,2,Math.PI,[.98,.70,.19]));
+  const repo=makeCar('repo',164,58,2,Math.PI,[.98,.70,.19]);cars.push(repo);
   for(let i=0;i<20;i++) {
     const road=MIN+(1+Math.floor(rng()*7))*BLOCK,x=road+(i%2?4.15:-4.15),z=MIN+Math.floor(rng()*8)*BLOCK+16+rng()*11;
     cars.push(makeCar('park-'+i,x,z,i%3,i%2?0:Math.PI,colors[i%colors.length].map(v=>v*.75)));
   }
-  for(let i=0;i<12;i++) {
-    const left=MIN+(i%3)*BLOCK+2.7,right=MIN+(5+i%3)*BLOCK-2.7,top=MIN+(i%2)*BLOCK+2.7,bottom=MIN+(5+i%3)*BLOCK-2.7;
-    const route=[{x:left,z:top},{x:right,z:top},{x:right,z:bottom},{x:left,z:bottom}];
-    const segment=i%4,next=(segment+1)%4,t=.12+(i%3)*.27,a=route[segment],b=route[next];
-    const car=makeCar('traffic-'+i,a.x+(b.x-a.x)*t,a.z+(b.z-a.z)*t,i%3,Math.atan2(b.x-a.x,b.z-a.z));
-    Object.assign(car,{traffic:true,route,next,cruise:6+i%4*1.2,speed:6});cars.push(car);
+  for(let index=0;index<12;index++) {
+    const lane=2.7,west=MIN+index%3*BLOCK+lane,east=MIN+(5+index%3)*BLOCK-lane;
+    const north=MIN+index%2*BLOCK+lane,south=MIN+(5+index%3)*BLOCK-lane;
+    const route=[{x:west,z:north},{x:east,z:north},{x:east,z:south},{x:west,z:south}];
+    const next=(index%4+1)%4,from=route[index%4],to=route[next],fraction=.12+index%3*.27;
+    const car=makeCar(`traffic-${index}`,from.x+(to.x-from.x)*fraction,from.z+(to.z-from.z)*fraction,index%3,Math.atan2(to.x-from.x,to.z-from.z));
+    Object.assign(car,{route,next,traffic:true,cruise:6+index%4*1.2,speed:6});cars.push(car);
   }
   for(let i=0;i<24;i++) {
     const ix=2+i%5,iz=1+Math.floor(i/5),x=MIN+ix*BLOCK+8.2,z=MIN+iz*BLOCK+8.2;
-    const route=[{x,z},{x,z:z+42},{x:x+42,z:z+42},{x:x+42,z}];
-    peds.push({x,z,yaw:0,phase:rng()*6.28,speed:1.1+rng()*.65,next:1,route,color:colors[i%colors.length],skin:[.65+rng()*.2,.43+rng()*.18,.29+rng()*.18]});
+    const route=[[0,0],[0,BLOCK],[BLOCK,BLOCK],[BLOCK,0]].map(([dx,dz])=>({x:x+dx,z:z+dz}));
+    const phase=rng()*6.28,speed=1.1+rng()*.65,skin=[.65+rng()*.2,.43+rng()*.18,.29+rng()*.18];
+    peds.push({x,z,yaw:0,phase,speed,route,next:1,color:colors[i%colors.length],skin});
   }
   return {seed,geometry:g,colliders,buildings,cars,peds,signals,rooftop};
+}
+function tourismSign(g,x,z) {
+  g.box(x,7,z-1.2,10,3.2,.3,[.14,.35,.37]);
+  const face=z-1.4;
+  g.quad([x+4.8,5.5,face],[x-4.8,5.5,face],[x-4.8,8.5,face],[x+4.8,8.5,face],[0,0,-1],[1,1,1],2);
 }
 function palm(g,x,z,h) {
   g.cylinder(x,h/2,z,.23,h,P.trunk,7);
@@ -93,7 +115,7 @@ function palm(g,x,z,h) {
 export function carGeometry(g, car, time=0,dusk=0,passenger=false) {
   const m=MODELS[car.model],c=car.flash>0?[1,.87,.57]:car.color,a=car.yaw,s=Math.sin(a),co=Math.cos(a),w=m.width,l=m.length;
   const box=(x,y,z,bw,bh,bl,color)=>g.box(car.x+x*co+z*s,y,car.z-x*s+z*co,bw,bh,bl,color,a);
-  g.disc(car.x,.28,car.z,w*.8,l*.61,[.15,.20,.20]);
+  const shadow=[.15,.20,.20];g.disc(car.x,.28,car.z,.8*w,.61*l,shadow);
   box(0,.70,0,w,.62,l,c);box(0,.43,0,w*.94,.18,l*.97,[.12,.17,.19]);
   const cabinZ=car.model===1?.63:-.20,cabinL=car.model===1?1.8:2.05;
   if(passenger) {
@@ -107,15 +129,29 @@ export function carGeometry(g, car, time=0,dusk=0,passenger=false) {
   if(car.model===1){box(0,1.03,-1.5,w*.82,.12,1.55,[.18,.23,.22]);box(-w*.45,1.05,-1.4,.13,.45,1.7,c);box(w*.45,1.05,-1.4,.13,.45,1.7,c);}
   if(car.model===2){box(0,.98,-l*.43,w*.98,.09,.34,[.13,.20,.21]);box(0,.92,l*.36,w*.75,.07,.9,c);}
   for(const side of [-1,1])for(const end of [-1,1]){box(side*w*.47,.43,end*l*.30,.24,.65,.67,[.075,.095,.10]);box(side*w*.535,.44,end*l*.30,.025,.34,.35,[.57,.63,.63]);}
-  for(const side of [-1,1]){box(side*w*.30,.78,l*.505,.48,.20,.035,[1,.88,.56]);box(side*w*.32,.81,-l*.505,.46,car.braking?.27:.17,.035,car.braking?[1,.09,.03]:[.56,.12,.08]);
-    if(dusk>.5){const point=(x,z)=>[car.x+x*co+z*s,.29,car.z-x*s+z*co],start=side*w*.3;
-      g.quad(point(start-.15,l/2),point(start+.15,l/2),point(start+1.1,l/2+7),point(start-1.1,l/2+7),[0,1,0],[.74,.70,.40]);}
+  for(const side of [-1,1]) {
+    box(side*w*.30,.78,l*.505,.48,.20,.035,[1,.88,.56]);
+    const brakeColor=car.braking?[1,.09,.03]:[.56,.12,.08];
+    box(side*w*.32,.81,-l*.505,.46,car.braking?.27:.17,.035,brakeColor);
+    if(dusk>.5) {
+      const ground=(x,z)=>[car.x+co*x+s*z,.29,car.z-s*x+co*z],center=side*w*.3,front=l*.5;
+      g.quad(ground(center-.15,front),ground(center+.15,front),ground(center+1.1,front+7),ground(center-1.1,front+7),[0,1,0],[.74,.70,.40]);
+    }
   }
   box(0,.58,l*.51,w*.83,.12,.1,[.23,.28,.28]);box(0,.59,-l*.51,.45,.16,.04,[.90,.86,.66]);
-  if(car.police||car.cruiser){box(0,.77,0,w*1.015,.28,l*.48,[.86,.89,.84]);box(0,1.70,0,1.2,.17,.40,[.16,.22,.25]);box(-.36,1.81,0,.46,.16,.32,Math.sin(time*12)>0?[.2,.5,1]:[.12,.23,.5]);box(.36,1.81,0,.46,.16,.32,Math.sin(time*12)>0?[.5,.13,.12]:[1,.24,.18]);}
+  if(car.police||car.cruiser) {
+    const blue=Math.sin(time*12)>0;
+    box(0,.77,0,w*1.015,.28,l*.48,[.86,.89,.84]);box(0,1.70,0,1.2,.17,.40,[.16,.22,.25]);
+    box(-.36,1.81,0,.46,.16,.32,blue?[.2,.5,1]:[.12,.23,.5]);
+    box(.36,1.81,0,.46,.16,.32,blue?[.5,.13,.12]:[1,.24,.18]);
+  }
 }
 export function personGeometry(g,p,time,hero=false) {
-  if(p.down>0){g.disc(p.x,.28,p.z,.95,.45,[.18,.22,.21]);g.box(p.x,.47,p.z,1.5,.35,.55,p.flash>0?[1,.7,.4]:p.color||[.20,.32,.36],p.yaw||0);g.box(p.x+.7,.47,p.z,.35,.36,.35,p.skin||[.7,.47,.33]);return;}
+  if(p.down>0) {
+    const color=p.flash>0?[1,.7,.4]:(p.color||[.20,.32,.36]);
+    g.disc(p.x,.28,p.z,.95,.45,[.18,.22,.21]);g.box(p.x,.47,p.z,1.5,.35,.55,color,p.yaw||0);
+    g.box(p.x+.7,.47,p.z,.35,.36,.35,p.skin||[.7,.47,.33]);return;
+  }
   const a=p.yaw||0,s=Math.sin(a),c=Math.cos(a),y=p.seated?-.35:p.y||0,walk=Math.sin((p.phase||0)+time*8)*Math.min(1,p.moving?1:0);
   const box=(x,b,z,w,h,l,col)=>g.box(p.x+x*c+z*s,y+b,p.z-x*s+z*c,w,h,l,col,a);
   const skin=p.skin||[.72,.46,.31],shirt=p.flash>0?[1,.84,.48]:hero?[.93,.47,.30]:p.color||[.15,.28,.35],pants=hero?[.17,.29,.35]:[.22,.29,.30];
