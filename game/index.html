@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#182b36">
+<link rel="icon" href="data:,">
+<title>Solano Streets</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#142733;color:#fff7e9;font:15px system-ui,sans-serif}button{font:inherit;cursor:pointer}#view{display:block;width:100vw;height:100vh;touch-action:none}#hud{position:fixed;inset:0;pointer-events:none;padding:clamp(14px,3vw,36px);text-shadow:0 2px 4px #131b24} [hidden]{display:none!important}
+#stats,#objective,#drive,#map-frame,#hint{background:#14212de6;border:1px solid #fff4;border-radius:7px}#stats{position:absolute;right:3vw;top:4vh;padding:12px 17px;min-width:148px}#cash{font-size:24px;font-weight:800;color:#8ef6bf}#stars{color:#ffca79;letter-spacing:4px}progress{display:block;width:100%;height:8px;margin:8px 0;accent-color:#ff9277}
+#objective{display:inline-block;padding:12px 17px;border-left:4px solid #ffbf73;max-width:52vw}#objective b{display:block;color:#ffbf73;font-size:12px;text-transform:uppercase;letter-spacing:.13em;margin-bottom:3px}#map-frame{position:absolute;bottom:7vh;left:3vw;padding:6px}#map{display:block;width:clamp(100px,21vw,188px);height:auto}#map-frame span{display:block;font-size:10px;letter-spacing:.18em;margin:4px 2px}#drive{position:absolute;bottom:7vh;right:3vw;padding:10px 16px;text-align:right}#speed{font-size:32px;font-weight:850}#model{display:block;color:#ffbf73}
+#hint{position:absolute;bottom:1vh;left:3vw;padding:4px 9px;font-size:11px}#lock{pointer-events:auto;color:inherit;background:none;border:0;padding:0 4px}#near{position:absolute;left:50%;bottom:24%;transform:translateX(-50%);background:#14212ddd;padding:8px 12px;border-radius:4px;white-space:nowrap}
+.screen{position:fixed;inset:0;display:flex;align-items:center;padding:7vw;background:linear-gradient(90deg,#121c2bed, #121c2b9c 38%,transparent 74%)}.screen section{max-width:450px}.place{color:#ffbb77;font-weight:750;letter-spacing:.25em;text-transform:uppercase;font-size:12px}h1{font-size:clamp(53px,9vw,126px);font-weight:950;line-height:.8;text-transform:uppercase;font-style:italic;letter-spacing:-.075em;margin:18px 0 24px}h2{font-size:42px;margin:8px 0}.screen p{line-height:1.55;max-width:35ch}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}.actions button{padding:10px 22px;border:1px solid #ffbb77;border-radius:4px;color:#172230;background:#ffbb77;font-weight:800}.actions button+button{background:#172230;color:#ffdcba}
+#banner{position:fixed;top:27%;left:50%;transform:translateX(-50%);background:#14212dea;border-top:3px solid #ffbb77;text-align:center;padding:13px 34px;border-radius:5px;pointer-events:none;white-space:nowrap}#banner strong{display:block;font-size:clamp(20px,4vw,40px);font-style:italic}#banner span{color:#93f1b4}
+#dialogue{position:absolute;bottom:13vh;left:50%;transform:translateX(-50%);width:min(44vw,460px);background:#14212dee;border-left:3px solid #ffbf73;padding:11px 14px;border-radius:4px}
+#dialogue b{color:#ffbf73}#lines{white-space:pre-line;margin-top:4px}#ammo{font-size:12px;margin-top:5px}#reticle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:20px;color:#fff9}
+</style>
+<script defer src="src/render.js"></script>
+<script defer src="src/world.js"></script>
+<script defer src="src/audio.js"></script>
+<script defer src="src/missions.js"></script>
+<script defer src="src/street.js"></script>
+<script defer src="src/shots.js"></script>
+<script defer src="src/main.js"></script>
+</head>
+<body>
+<canvas id="view" aria-label="3D view of Port Solano"></canvas>
+<div id="hud" hidden>
+  <div id="objective"><b id="mission"></b><span id="task"></span></div>
+  <div id="stats"><div id="cash"></div><progress id="health" max="100" value="100" aria-label="Health"></progress><div id="stars" aria-label="Wanted level"></div><div id="ammo"></div></div>
+  <div id="map-frame"><canvas id="map" width="188" height="188" aria-label="Minimap"></canvas><span>PORT SOLANO · N ↑</span></div>
+  <div id="drive" hidden><span id="speed"></span> km/h <span id="model"></span></div>
+  <div id="near" hidden></div>
+  <div id="reticle" aria-hidden="true" hidden>+</div>
+  <div id="dialogue" hidden><b>Mara Quinn</b><div id="lines"></div></div>
+  <div id="hint">WASD move / drive · Shift run · Space jump / brake · E car · F punch · Click fire · M mute · P pause · Drag orbit<span id="mute"></span> <button id="lock" title="Lock camera pointer" aria-label="Lock camera pointer">⊕</button></div>
+</div>
+<div id="title" class="screen">
+  <section><div class="place">Port Solano</div><h1>Solano<br>Streets</h1><p>Getaway driver Rae Vega is new in Port Solano and running low on cash. Local fixer Mara Quinn offers her a pickup job and a chance to earn a place in town.</p>
+  <div class="actions"><button id="start">Start</button><button id="continue" hidden>Continue</button></div></section>
+</div>
+<div id="pause" class="screen" hidden><section><div class="place">Solano Streets</div><h2>Paused</h2><div class="actions"><button id="resume">Resume</button><button id="menu">Main menu</button></div></section></div>
+<div id="story" class="screen" hidden><section><div class="place">Solano Streets</div><h2>Story complete</h2><p id="earnings"></p><div class="actions"><button id="free">Continue free roam</button></div></section></div>
+<div id="banner" hidden><strong id="bannerTitle"></strong><span id="bannerDetail"></span></div>
+</body>
+</html>
